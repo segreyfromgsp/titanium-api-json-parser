@@ -6,7 +6,10 @@ Yell = {
     zoom : 0,
     bool : false,
     some : '',
-    v : []
+    v : [],
+    Mazzle : {
+        toff : ''
+    }
 };
 
 var y = new Yell();
@@ -16,3 +19,7 @@ y.some = 1;
 y.v[1] = 1;
 
 var d = new Date();
+
+var mt = new Yell.Mazzle();
+
+mt.toff = '!';
