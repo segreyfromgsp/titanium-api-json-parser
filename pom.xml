@@ -5,6 +5,10 @@
     <artifactId>jsoner</artifactId>
     <name>JSON tree parser</name>
     <version>1.0-SNAPSHOT</version>
+    
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -25,7 +29,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>${loader.mainClass}</mainClass>
+                            <mainClass>ru.net.gsp.jsoner.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

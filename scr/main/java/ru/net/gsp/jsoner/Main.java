@@ -1,4 +1,4 @@
-package ru.net.gsp.json;
+package ru.net.gsp.jsoner;
 
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
