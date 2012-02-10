@@ -6,7 +6,7 @@ package ru.net.gsp.jsoner;
 enum Type {
     NUMBER("Number", "0"),
     STRING("String", "''"),
-    CALLBACK("Callback", "function(){}"),
+    CALLBACK("Callback", "new Callback()"),
     VOID("void", ""),
     DICTIONARY("Dictionary", "{}"),
     BOOLEAN("Boolean", "false"),

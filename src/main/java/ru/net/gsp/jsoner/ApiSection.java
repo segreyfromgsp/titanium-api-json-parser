@@ -1,107 +1,85 @@
 package ru.net.gsp.jsoner;
 
-import java.util.*;
+import org.codehaus.jackson.JsonNode;
 
-import static ru.net.gsp.jsoner.Main.line;
-import static ru.net.gsp.jsoner.Main.out;
-import static ru.net.gsp.jsoner.Main.whitespaces;
+import java.util.*;
 
 /**
  * @author segrey
  */
-class ApiSection {
-    final List<ApiProperty> properties = new ArrayList<ApiProperty>();
-    final List<ApiMethod> methods = new ArrayList<ApiMethod>();
+abstract class ApiSection {
+    private static final String NAME = "name";
+    private static final Map<String, String> RESERVED = new HashMap<String, String>();
 
-    void print(final int ws) {
-        final Iterator<ApiProperty> pIt = properties.iterator();
-        while (pIt.hasNext()) {
-            pIt.next().print(ws);
-            line(pIt.hasNext() || !methods.isEmpty() ? "," : "");
-        }
-
-        final Iterator<ApiMethod> mIt = methods.iterator();
-        while (mIt.hasNext()) {
-            mIt.next().print(ws);
-            line(mIt.hasNext() ? "," : "");
-        }
+    static {
+        Arrays.asList("", "", "", "");
+        RESERVED.put("function", "func");
+        RESERVED.put("var", "vrb");
+        RESERVED.put("null", "nil");
+        RESERVED.put("undefined", "undef");
+        RESERVED.put("return", "rtn");
+        RESERVED.put("const", "cnst");
+        RESERVED.put("default", "defval");
+//        RESERVED.put("", "");
     }
 
-    static class ApiProperty {
-        final String name;
-        final String strType;
-        final Type type;
+    abstract void print(final int ws);
 
-        ApiProperty(final String name, final String strType, final Type type) {
-            this.name = name;
-            this.strType = strType;
-            this.type = type;
-        }
+    protected static String resolveName(final JsonNode m) {
+        final String name = m.get(NAME).getTextValue();
+        return RESERVED.containsKey(name) ? RESERVED.get(name) : name;
+    }
 
-        void print(final int ws) {
-            whitespaces(ws);
-            out(name + " : ");
-            out(formatType());
-        }
-
-        protected String formatType() {
-            if (type == null) return "new " + strType + "()";
-            if (Type.SEVERAL == type) {
-                return type.value + " /* " + strType + " */ ";
+    protected static Map.Entry<String, Type> resolveSingleType(final JsonNode node)  {
+        final Map<String, Type> typeMap = resolveTypes(node);
+        final Map.Entry<String, Type> typeEntry;
+        if (typeMap.size() > 1) {
+            final StringBuilder tNames = new StringBuilder();
+            for (final String s : typeMap.keySet()) {
+                tNames.append(", ").append(s);
             }
-            return type.value;
+            typeEntry = new AbstractMap.SimpleEntry<String, Type>(tNames.substring(2), Type.SEVERAL);
+        } else {
+            typeEntry = typeMap.entrySet().iterator().next();
         }
+        return typeEntry;
     }
 
-    static class ApiMethod extends ApiProperty {
-        final ApiParameter[] params;
-
-        ApiMethod(final String name, final String strType, final Type type, final ApiParameter[] params) {
-            super(name, strType, type);
-            this.params = params;
-        }
-
-        void print(final int ws) {
-            whitespaces(ws);
-            out(name + " : function(");
-            if (params.length > 0) {
-                for (int i = 0; i < params.length; i++) {
-                    out(params[i].name);
-                    if (i < params.length - 1) out(", ");
+    private static Map<String, Type> resolveTypes(final JsonNode n) {
+        final Map<String, Type> typeMap = new HashMap<String, Type>();
+        if (n.has("type")) {
+            final JsonNode t = n.get("type");
+            if (t.isArray()) {
+                final Iterator<JsonNode> tps = t.getElements();
+                while (tps.hasNext()) {
+                    addType(tps.next().getValueAsText(), typeMap);
+                }
+            } else {
+                addType(t.getValueAsText(), typeMap);
+            }
+        } else if (n.isArray()) {
+            final Iterator<JsonNode> it = n.getElements();
+            while (it.hasNext()) {
+                final Map<String, Type> map = resolveTypes(it.next());
+                for (final String k : map.keySet()) {
+                    if (!typeMap.containsValue(map.get(k))) typeMap.put(k, map.get(k));
                 }
             }
-            out(") {");
-
-            final String t = formatType();
-            if (!t.isEmpty()) {
-                line("");
-                whitespaces(ws + 1);
-                line("return " + t + ";");
-                whitespaces(ws);
-            }
-            out("}");
         }
-
+        if (typeMap.isEmpty()) throw new RuntimeException("NO TYPE : " + n.toString());
+        return typeMap;
     }
-    
-    static class ApiParameter {
-        final String name;
-        final boolean optional;
 
-        ApiParameter(final String name, final boolean optional) {
-            this.name = name;
-            this.optional = optional;
+    private static void addType(final String tName, final Map<String, Type> tMap) {
+        final Type tt;
+        final String t = Main.ti(tName);
+        if (t.contains("<") || !t.contains(".")) {
+            final String type = t.contains("<") ? t.substring(0, t.indexOf("<")) : t;
+            tt = Type.forName(type);
+        } else {
+            tt = null;
         }
-    }
-
-    void addProperty(final ApiProperty p) {
-        properties.add(p);
-    }
-
-    void addMethod(final ApiMethod method) {
-        methods.add(method);
+        if (tt == null || !tMap.containsValue(tt)) tMap.put(t, tt);
     }
 
 }
-
-

@@ -1,5 +1,7 @@
 package ru.net.gsp.jsoner;
 
+import static ru.net.gsp.jsoner.PW.*;
+
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
 
@@ -12,22 +14,8 @@ import java.util.*;
  * @author segrey
  */
 public class Main {
-    private static final String NAME = "name";
     private static final String SECTION = "{}";
     private static final List<String> PLATFORMS = Arrays.asList("iphone", "android");
-    private static PrintWriter PW = new PrintWriter(System.out);
-    private static final Map<String, String> RESERVED = new HashMap<String, String>();
-
-    static {
-        Arrays.asList("", "", "", "");
-        RESERVED.put("function", "func");
-        RESERVED.put("var", "vrb");
-        RESERVED.put("null", "nil");
-        RESERVED.put("undefined", "undef");
-        RESERVED.put("return", "rtn");
-        RESERVED.put("const", "cnst");
-//        RESERVED.put("", "");
-    }
 
     public static void main(final String[] args) {
         try {
@@ -51,7 +39,7 @@ public class Main {
             }
 
             final File outFile = args.length > 2 ? resolveFile(args[2], true) : null;
-            if (outFile != null) PW = new PrintWriter(outFile);
+            if (outFile != null) PW.set(new PrintWriter(outFile));
             loadJson(file, platform);
         } catch (final Exception e) {
             e.printStackTrace();
@@ -85,7 +73,7 @@ public class Main {
         long st = System.currentTimeMillis();
 
         System.out.println("Loading JSON document");
-        final Map<String, Object> tree = new HashMap<String, Object>();
+        final Map<String, Object> tree = new TreeMap<String, Object>();
         final JsonNode rootNode = new ObjectMapper().readValue(file, JsonNode.class);
         final Iterator<String> objects = rootNode.getFieldNames();
         System.out.println("Document loaded in " + (System.currentTimeMillis() - st) + " ms.");
@@ -102,15 +90,14 @@ public class Main {
             final Map<String, Object> branch = resolveApiBranch(tree, nTree, 0);
             if (!branch.containsKey(SECTION)) throw new Exception("Bad API branch: " + objName);
 
-            final ApiSection obj = (ApiSection) branch.get(SECTION);
-
+            final ApiClass obj = (ApiClass) branch.get(SECTION);
 
             if (objNode.has(Entity.PROPERTY.listName)) {
                 final Iterator<JsonNode> props = objNode.get(Entity.PROPERTY.listName).getElements();
                 while (props.hasNext()) {
                     final JsonNode p = props.next();
                     if (!isForPlatform(p, platform)) continue;
-                    obj.addProperty(resolveProperty(p));
+                    obj.addProperty(new ApiProperty(p));
                 }
             }
 
@@ -119,7 +106,7 @@ public class Main {
                 while (meths.hasNext()) {
                     final JsonNode m = meths.next();
                     if (!isForPlatform(m, platform)) continue;
-                    obj.addMethod(resolveMethod(m, objName));
+                    obj.addMethod(new ApiMethod(m, objName));
                 }
             }
         }
@@ -146,92 +133,10 @@ public class Main {
         return false;
     }
 
-    private static ApiSection.ApiProperty resolveProperty(final JsonNode node) throws Exception {
-        final String fName = resolveName(node);
-        final Map.Entry<String, Type> typeEntry = resolveSingleType(node);
-        return new ApiSection.ApiProperty(fName, typeEntry.getKey(), typeEntry.getValue());
-    }
-
-    private static ApiSection.ApiMethod resolveMethod(final JsonNode m, final String objName) throws Exception {
-        final String mName = resolveName(m);
-        if (!m.has("returns")) throw new Exception("No return type for method " + objName + "." + mName);
-        final Map.Entry<String, Type> typeEntry = resolveSingleType(m.get("returns"));
-        final List<ApiSection.ApiParameter> paramList = new ArrayList<ApiSection.ApiParameter>();
-        if (m.has(Entity.PARAMETER.listName)) {
-            final Iterator<JsonNode> params = m.get(Entity.PARAMETER.listName).getElements();
-            while (params.hasNext()) {
-                final JsonNode p = params.next();
-                final String pName = resolveName(p);
-                final JsonNode op = p.has("optional") ? p.get("optional") : null;
-                final boolean optional = op != null && p.isBoolean() && p.getBooleanValue();
-                paramList.add(new ApiSection.ApiParameter(pName, optional));
-            }
-        }
-        return new ApiSection.ApiMethod(
-            mName, typeEntry.getKey(), typeEntry.getValue(), paramList.isEmpty() ?
-            new ApiSection.ApiParameter[0] : paramList.toArray(new ApiSection.ApiParameter[paramList.size()])
-        );
-    }
-
-    private static String resolveName(final JsonNode m) {
-        final String name = m.get(NAME).getTextValue();
-        return RESERVED.containsKey(name) ? RESERVED.get(name) : name;
-    }
-
-    private static String ti(final String name) {
-        return name.replaceAll("^Titanium\\.", "Ti.");
-    }
-
-    private static Map.Entry<String, Type> resolveSingleType(final JsonNode node) throws Exception {
-        final Map<String, Type> typeMap = resolveTypes(node);
-        final Map.Entry<String, Type> typeEntry;
-        if (typeMap.size() > 1) {
-            final StringBuilder tNames = new StringBuilder();
-            for (final String s : typeMap.keySet()) {
-                tNames.append(", ").append(s);
-            }
-            typeEntry = new AbstractMap.SimpleEntry<String, Type>(tNames.substring(2), Type.SEVERAL);
-        } else {
-            typeEntry = typeMap.entrySet().iterator().next();
-        }
-        return typeEntry;
-    }
-
-    private static Map<String, Type> resolveTypes(final JsonNode n) throws Exception {
-        final Map<String, Type> typeMap = new HashMap<String, Type>();
-        if (n.has("type")) {
-            final JsonNode t = n.get("type");
-            if (t.isArray()) {
-                final Iterator<JsonNode> tps = t.getElements();
-                while (tps.hasNext()) {
-                    addType(tps.next().getValueAsText(), typeMap);
-                }
-            } else {
-                addType(t.getValueAsText(), typeMap);
-            }
-        } else if (n.isArray()) {
-            final Iterator<JsonNode> it = n.getElements();
-            while (it.hasNext()) {
-                final Map<String, Type> map = resolveTypes(it.next());
-                for (final String k : map.keySet()) {
-                    if (!typeMap.containsValue(map.get(k))) typeMap.put(k, map.get(k));
-                }
-            }
-        }
-        if (typeMap.isEmpty()) throw new Exception("NO TYPE : " + n.toString());
-        return typeMap;
-    }
-
-    private static void addType(final String tName, final Map<String, Type> tMap) {
-        final Type tt;
-        final String t = ti(tName);
-        if (t.contains("<") || !t.contains(".")) {
-            final String type = t.contains("<") ? t.substring(0, t.indexOf("<")) : t;
-            tt = Type.forName(type);
-        } else {
-            tt = null;
-        }
-        if (tt == null || !tMap.containsValue(tt)) tMap.put(t, tt);
+    static String ti(final String name) {
+        return name.replaceAll("^Titanium\\.", "Ti.")
+            .replaceAll("^Titanium$", "Ti")
+            .replaceAll("(\\.[23]DMatrix)", "_\1");
     }
 
     @SuppressWarnings("unchecked")
@@ -239,47 +144,37 @@ public class Main {
         final String key = nTree[i];
         final Map<String, Object> branch;
         if (!tree.containsKey(key)) {
-            branch = new HashMap<String, Object>();
+            branch = new TreeMap<String, Object>();
             tree.put(key, branch);
         } else {
             branch = (Map<String, Object>) tree.get(key);
         }
         if (i < nTree.length - 1) return resolveApiBranch(branch, nTree, i + 1);
-        if (!branch.containsKey(SECTION)) branch.put(SECTION, new ApiSection());
+        if (!branch.containsKey(SECTION)) branch.put(SECTION, new ApiClass());
         return branch;
     }
 
     @SuppressWarnings("unchecked")
     private static void writeTree(final Map<String, Object> tree, final int ws) {
-        int i = 0;
-        for (final String n : tree.keySet()) {
+        final Iterator<String> it = tree.keySet().iterator();
+        while (it.hasNext()) {
+            final String n = it.next();
             if (n.equals(SECTION)) {
-                final ApiSection section = (ApiSection) tree.get(n);
-                section.print(ws + 1);
+                final ApiClass section = (ApiClass) tree.get(n);
+                section.print(ws);
             } else {
                 whitespaces(ws);
                 line(n + " " + (ws > 0 ? ":" : "=") + " {");
                 final Map<String, Object> v = (Map<String, Object>) tree.get(n);
                 writeTree(v, ws + 1);
                 whitespaces(ws);
-                line("}" + (ws > 0 ? i < tree.size() - 1 ? "," : ";" : ";"));
+                out("}");
             }
+            line(ws > 0 ? (it.hasNext() ? "," : "") : ";");
             PW.flush();
-            i++;
         }
     }
 
-    static void whitespaces(final int count) {
-        if (count < 1) return;
-        for (int i = 0; i < count; i++) out(" ");
-    }
-
-    static void out(final String s) {
-        PW.print(s);
-    }
-
-    static void line(final String s) {
-        PW.println(s);
-    }
+    
 
 }
